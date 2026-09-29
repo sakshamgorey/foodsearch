@@ -58,15 +58,11 @@ Inertia + React + TypeScript, styled with **shadcn/ui** (new-york style, Tailwin
 - Theme tokens are in `resources/css/app.css`. The base is neutral with a green `--primary`, and dark mode follows the OS.
 - The controller sends only what the page renders (`present()`). `lastRun` and `total` are lazy props, so typing in the box doesn't re-count the table.
 
-## Screenshots
+## Demo
 
-The screenshots use six products with photos from Open Food Facts. The GIF shows a search for “chocolate.”
+This fixed-size dark-mode GIF shows a chocolate search with product photos from Open Food Facts.
 
-![Food Search desktop view](docs/screenshots/search-desktop.png)
-
-![Food Search mobile view](docs/screenshots/search-mobile.png)
-
-![Searching for chocolate](docs/screenshots/search-demo.gif)
+![Food Search demo](docs/screenshots/search-demo.gif)
 
 ## Commands
 
