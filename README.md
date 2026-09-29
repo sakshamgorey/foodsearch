@@ -60,7 +60,7 @@ Inertia + React + TypeScript, styled with **shadcn/ui** (new-york style, Tailwin
 
 ## Screenshots
 
-These captures use sample product data. The GIF shows a search for “chocolate.”
+The screenshots use six products with photos from Open Food Facts. The GIF shows a search for “chocolate.”
 
 ![Food Search desktop view](docs/screenshots/search-desktop.png)
 
