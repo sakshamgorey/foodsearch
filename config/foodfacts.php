@@ -23,8 +23,9 @@ return [
 
     'page_size' => (int) env('OFF_PAGE_SIZE', 100),
 
-    // Upper bound per run. 50 pages x 100 = 5,000 products ≈ 6–7 minutes at 8 req/min.
-    'max_pages' => (int) env('OFF_MAX_PAGES', 50),
+    // Upper bound per run. 250 pages x 100 = 25,000 products ≈ 31 minutes at 8 req/min.
+    // Incremental runs usually stop long before this; it mostly bounds --full runs.
+    'max_pages' => (int) env('OFF_MAX_PAGES', 250),
 
     // Keep a safety margin under OFF's 10 req/min search limit.
     'requests_per_minute' => (int) env('OFF_REQUESTS_PER_MINUTE', 8),

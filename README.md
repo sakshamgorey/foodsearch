@@ -33,6 +33,7 @@ php artisan schedule:work                         # in production: cron `* * * *
 npm install && npm run build                       # or `npm run dev` while working on the UI
 
 php artisan foodfacts:ingest --max-pages=5        # try it now
+php artisan foodfacts:ingest --full               # fill the index (250 pages ≈ 25k products, ~31 min)
 php artisan foodfacts:status
 php artisan serve                                  # http://localhost:8000
 ```
@@ -70,7 +71,7 @@ This fixed-size dark-mode GIF shows a chocolate search with product photos from 
 | command | what it does |
 |---|---|
 | `foodfacts:ingest` | Starts an incremental run, or does nothing if one is active. It resumes a stalled run from its cursor. |
-| `foodfacts:ingest --full` | Ignores the watermark and pages up to `max_pages`. |
+| `foodfacts:ingest --full` | Ignores the watermark and pages up to `max_pages`. Runs monthly so the index keeps growing past the weekly deltas. |
 | `foodfacts:ingest --max-pages=N` | Sets a per-run page cap. |
 | `foodfacts:ingest --resume-only` | Runs hourly. It only revives stalled runs and never starts a new one. |
 | `foodfacts:status` | Shows the last runs, their stop reasons and errors, and the index size. |
@@ -96,7 +97,7 @@ This fixed-size dark-mode GIF shows a chocolate search with product photos from 
 
 ## Known limits
 
-- **OFF's search API is not a bulk export.** OFF asks clients that need more than a few hundred products to use the daily JSONL/CSV dumps. At 8 req/min × 100 products, one page cap of 50 pages takes about 6 minutes and covers 5,000 products. The full catalogue (3M+ products) would take days. Use the API for a scoped slice (`OFF_COUNTRY`, a category filter) or for weekly deltas. For the whole database, change the job to stream the JSONL dump in chunks: the upsert path and the search stay the same.
+- **OFF's search API is not a bulk export.** OFF asks clients that need more than a few hundred products to use the daily JSONL/CSV dumps. At 8 req/min × 100 products, the default cap of 250 pages takes about 31 minutes and covers 25,000 products. The full catalogue (3M+ products) would take days. Use the API for a scoped slice (`OFF_COUNTRY`, a category filter) or for weekly deltas. For the whole database, change the job to stream the JSONL dump in chunks: the upsert path and the search stay the same.
 - The incremental cutoff assumes `sort_by=last_modified_t` returns products newest-first. If OFF changes that ordering, runs fall back to `max_pages` and stay correct, just slower.
 - **Typo matching only works on short names.** The PR's trigram branch uses `product_name % ?`, which compares the query with the *whole* name. `nutela` → *Nutella* matches, but `biscit` doesn't match *Parle-G Glucose Biscuits*, because the similarity against a long string stays under 0.3. You'd need `word_similarity` (`<%`) for per-word fuzziness, and the PR doesn't use it yet.
 - **Trigram ignores websearch operators.** The trigram predicate is OR'ed with the tsquery and receives the raw string, so `ferrero -nutella` still returns Nutella through the trigram branch. `ProductSearchTest` pins both behaviours, so you'll notice if the PR changes them.

@@ -10,6 +10,15 @@ Schedule::command('foodfacts:ingest')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Weekly runs stop at last week's watermark, so they only pick up recent
+// changes. A monthly full run goes deeper into the catalogue (up to
+// max_pages). If the weekly run is still going, this is a no-op.
+Schedule::command('foodfacts:ingest --full')
+    ->monthlyOn(1, '03:13')
+    ->timezone('Asia/Kolkata')
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Cheap safety net: resumes a run whose worker died or whose next-page
 // dispatch was lost. A no-op when nothing is stalled.
 Schedule::command('foodfacts:ingest --resume-only')
