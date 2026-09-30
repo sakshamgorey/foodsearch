@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Inertia\Inertia;
 use Inertia\Response;
+use Inertia\ScrollMetadata;
 
 class ProductSearchController extends Controller
 {
@@ -18,7 +19,17 @@ class ProductSearchController extends Controller
 
         return Inertia::render('products/search', [
             'q' => $q,
-            'products' => fn () => $this->present($this->search($q)->withQueryString()),
+            // Scroll prop: <InfiniteScroll> asks for ?page=N and Inertia appends
+            // products.data onto what the client already has.
+            'products' => Inertia::scroll(
+                fn () => $this->present($this->search($q)),
+                metadata: fn (array $products) => new ScrollMetadata(
+                    'page',
+                    $products['current_page'] > 1 ? $products['current_page'] - 1 : null,
+                    $products['current_page'] < $products['last_page'] ? $products['current_page'] + 1 : null,
+                    $products['current_page'],
+                ),
+            ),
             // Not re-sent on live-search keystrokes (the page asks only for q + products).
             'lastRun' => fn () => $this->lastRun(),
             'total' => fn () => Product::count(),
@@ -46,9 +57,16 @@ class ProductSearchController extends Controller
         // Otherwise: WHERE search_vector @@ websearch_to_tsquery(...) OR <trigram match>
         //            ORDER BY ts_rank(...) * 1.0 + similarity(...) * 0.25 DESC
         return Product::search($q)
-            ->query(fn ($query) => $query->select([
-                'id', 'code', 'product_name', 'brands', 'categories', 'image_url', 'off_modified_at',
-            ]))
+            ->query(fn ($query) => $query
+                ->select(['id', 'code', 'product_name', 'brands', 'categories', 'image_url', 'off_modified_at'])
+                // Equal ranks come back in no particular order, so page 2 could repeat
+                // rows from page 1 while scrolling. Break ties by id. This has to run
+                // after Scout adds its rank ORDER BY, and not on the count query.
+                ->when($q !== '', fn ($query) => $query->beforeQuery(function ($base) {
+                    if (! $base->aggregate) {
+                        $base->orderByDesc('products.id');
+                    }
+                })))
             ->paginate(24)
             // Scout appends ?query=<term> to page links; we already carry ?q=.
             // A null value is dropped by http_build_query.
@@ -58,10 +76,6 @@ class ProductSearchController extends Controller
     /** Shape the paginator for the React page: only what it renders. */
     private function present(LengthAwarePaginator $page): array
     {
-        $current = $page->currentPage();
-        $from = max(1, $current - 2);
-        $to = min($page->lastPage(), $current + 2);
-
         return [
             'data' => $page->getCollection()->map(function (Product $p) {
                 $categories = array_values(array_filter(array_map('trim', explode(',', (string) $p->categories))));
@@ -77,19 +91,9 @@ class ProductSearchController extends Controller
                     'url' => $p->offUrl(),
                 ];
             })->all(),
-            'current_page' => $current,
+            'current_page' => $page->currentPage(),
             'last_page' => $page->lastPage(),
             'total' => $page->total(),
-            'from' => $page->firstItem(),
-            'to' => $page->lastItem(),
-            'prev_url' => $page->previousPageUrl(),
-            'next_url' => $page->nextPageUrl(),
-            'first_url' => $page->url(1),
-            'last_url' => $page->url($page->lastPage()),
-            'window' => collect($page->getUrlRange($from, $to))
-                ->map(fn ($url, $n) => ['page' => $n, 'url' => $url])
-                ->values()
-                ->all(),
         ];
     }
 

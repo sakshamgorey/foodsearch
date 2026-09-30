@@ -1,11 +1,13 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, InfiniteScroll, router } from '@inertiajs/react';
+import type { InfiniteScrollActionSlotProps } from '@inertiajs/core';
 import {
+    ArrowUp,
     Barcode,
+    ChevronDown,
     CircleAlert,
     CircleCheck,
     ExternalLink,
     ImageOff,
-    Loader2,
     Package,
     RefreshCw,
     Search as SearchIcon,
@@ -17,18 +19,13 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import {
-    Pagination,
-    PaginationContent,
-    PaginationEllipsis,
-    PaginationItem,
-    PaginationLink,
-    PaginationNext,
-    PaginationPrevious,
-} from '@/components/ui/pagination';
+import { Card, CardContent } from '@/components/ui/card';
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
+import { Kbd } from '@/components/ui/kbd';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import type { IngestionSummary, ProductCard, ProductPage } from '@/types';
 
@@ -41,9 +38,15 @@ interface Props {
 
 const SUGGESTIONS = ['chocolate', 'biscuits', 'coca-cola', 'ferrero', 'nutela'];
 
+// After this many automatic page loads, switch to a "Load more" button so
+// the footer stays reachable.
+const AUTO_PAGES = 5;
+
+const GRID = 'grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4';
+
 export default function Search({ q, products, lastRun, total }: Props) {
     const [term, setTerm] = useState(q);
-    const [loading, setLoading] = useState(false);
+    const [searching, setSearching] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const firstRender = useRef(true);
 
@@ -59,15 +62,6 @@ export default function Search({ q, products, lastRun, total }: Props) {
         return () => clearTimeout(id);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [term]);
-
-    useEffect(() => {
-        const start = router.on('start', () => setLoading(true));
-        const finish = router.on('finish', () => setLoading(false));
-        return () => {
-            start();
-            finish();
-        };
-    }, []);
 
     // "/" focuses search, Escape clears it.
     useEffect(() => {
@@ -92,6 +86,10 @@ export default function Search({ q, products, lastRun, total }: Props) {
             preserveScroll: true,
             replace: true,
             only: ['q', 'products'],
+            // A new query starts a fresh list instead of appending to the old one.
+            reset: ['products'],
+            onStart: () => setSearching(true),
+            onFinish: () => setSearching(false),
         });
     }
 
@@ -99,7 +97,7 @@ export default function Search({ q, products, lastRun, total }: Props) {
         <>
             <Head title={q || undefined} />
 
-            <div className="min-h-screen">
+            <div className="flex min-h-screen flex-col">
                 <header className="bg-background/80 sticky top-0 z-10 border-b backdrop-blur">
                     <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
                         <a href="/" className="flex items-center gap-2 font-semibold tracking-tight">
@@ -112,9 +110,9 @@ export default function Search({ q, products, lastRun, total }: Props) {
                     </div>
                 </header>
 
-                <main className="mx-auto max-w-6xl px-4 pt-10 pb-16">
+                <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-10 pb-16">
                     <section className="mx-auto max-w-2xl text-center">
-                        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Find any packaged food</h1>
+                        <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">Find any packaged food</h1>
                         <p className="text-muted-foreground mt-2 text-sm sm:text-base">
                             Search {total.toLocaleString()} Open Food Facts products by name, brand, category or barcode.
                         </p>
@@ -127,9 +125,11 @@ export default function Search({ q, products, lastRun, total }: Props) {
                                 visit(term);
                             }}
                         >
-                            <div className="relative flex-1">
-                                <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-                                <Input
+                            <InputGroup className="bg-card h-11 flex-1 shadow-sm">
+                                <InputGroupAddon>
+                                    <SearchIcon />
+                                </InputGroupAddon>
+                                <InputGroupInput
                                     ref={inputRef}
                                     type="search"
                                     name="q"
@@ -138,17 +138,14 @@ export default function Search({ q, products, lastRun, total }: Props) {
                                     placeholder="Try “dark chocolate”, “ferrero” or a barcode"
                                     aria-label="Search products"
                                     autoFocus
-                                    className="bg-card h-11 pr-16 pl-9 text-base shadow-sm [&::-webkit-search-cancel-button]:hidden"
+                                    className="text-base [&::-webkit-search-cancel-button]:hidden"
                                 />
-                                <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
-                                    {loading ? (
-                                        <Loader2 className="text-muted-foreground size-4 animate-spin" aria-label="Searching" />
+                                <InputGroupAddon align="inline-end">
+                                    {searching ? (
+                                        <Spinner aria-label="Searching" />
                                     ) : term ? (
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            className="size-7"
+                                        <InputGroupButton
+                                            size="icon-xs"
                                             aria-label="Clear search"
                                             onClick={() => {
                                                 setTerm('');
@@ -156,14 +153,12 @@ export default function Search({ q, products, lastRun, total }: Props) {
                                             }}
                                         >
                                             <X />
-                                        </Button>
+                                        </InputGroupButton>
                                     ) : (
-                                        <kbd className="text-muted-foreground bg-muted hidden rounded border px-1.5 font-mono text-[11px] sm:inline-block">
-                                            /
-                                        </kbd>
+                                        <Kbd className="hidden sm:inline-flex">/</Kbd>
                                     )}
-                                </div>
-                            </div>
+                                </InputGroupAddon>
+                            </InputGroup>
                             <Button type="submit" size="lg" className="h-11">
                                 Search
                             </Button>
@@ -194,20 +189,25 @@ export default function Search({ q, products, lastRun, total }: Props) {
                     {products.data.length === 0 ? (
                         <EmptyState q={q} onSuggest={setTerm} />
                     ) : (
-                        <div
-                            className={cn(
-                                'grid grid-cols-2 gap-4 transition-opacity sm:grid-cols-3 lg:grid-cols-4',
-                                loading && 'pointer-events-none opacity-50',
+                        <InfiniteScroll
+                            data="products"
+                            buffer={600}
+                            manualAfter={AUTO_PAGES}
+                            aria-busy={searching}
+                            className={cn(GRID, 'transition-opacity', searching && 'pointer-events-none opacity-50')}
+                            previous={(slot) => <LoadMore {...slot} label="Load earlier results" icon={ArrowUp} />}
+                            next={(slot) => (
+                                <>
+                                    <LoadMore {...slot} label="Load more" icon={ChevronDown} />
+                                    {!slot.hasMore && <EndOfResults />}
+                                </>
                             )}
-                            aria-busy={loading}
                         >
                             {products.data.map((product) => (
                                 <ProductTile key={product.id} product={product} />
                             ))}
-                        </div>
+                        </InfiniteScroll>
                     )}
-
-                    {products.last_page > 1 && <Pager products={products} />}
                 </main>
 
                 <footer className="text-muted-foreground border-t py-6 text-center text-xs">
@@ -217,6 +217,8 @@ export default function Search({ q, products, lastRun, total }: Props) {
                     </a>{' '}
                     (ODbL). Search by PostgreSQL full-text + pg_trgm via Laravel Scout.
                 </footer>
+
+                <BackToTop />
             </div>
         </>
     );
@@ -267,7 +269,7 @@ function ResultsHeader({ q, products }: { q: string; products: ProductPage }) {
                 )}
             </h2>
             <span className="text-muted-foreground text-xs tabular-nums">
-                {products.from}–{products.to} of {products.total.toLocaleString()}
+                Showing {products.data.length.toLocaleString()} of {products.total.toLocaleString()}
             </span>
         </div>
     );
@@ -337,15 +339,90 @@ function ProductTile({ product }: { product: ProductCard }) {
     );
 }
 
+function TileSkeleton() {
+    return (
+        <Card className="gap-0 overflow-hidden py-0">
+            <Skeleton className="aspect-square rounded-none" />
+            <div className="flex flex-col gap-2 p-3 sm:p-4">
+                <Skeleton className="h-4 w-4/5" />
+                <Skeleton className="h-3.5 w-1/2" />
+                <div className="flex gap-1 pt-1">
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                    <Skeleton className="h-5 w-10 rounded-full" />
+                </div>
+                <Skeleton className="mt-2 h-3 w-24" />
+            </div>
+        </Card>
+    );
+}
+
+/** Previous/next slot: skeleton row while fetching, a button once auto-loading stops. */
+function LoadMore({ loading, hasMore, manualMode, fetch, label, icon: Icon }: InfiniteScrollActionSlotProps & { label: string; icon: typeof ArrowUp }) {
+    if (loading) {
+        return (
+            <div className={cn(GRID, 'py-4')} aria-hidden>
+                {Array.from({ length: 4 }, (_, i) => (
+                    <TileSkeleton key={i} />
+                ))}
+            </div>
+        );
+    }
+
+    if (!hasMore || !manualMode) return null;
+
+    return (
+        <div className="flex justify-center py-8">
+            <Button variant="outline" onClick={fetch}>
+                <Icon />
+                {label}
+            </Button>
+        </div>
+    );
+}
+
+function EndOfResults() {
+    return (
+        <div className="text-muted-foreground flex items-center gap-4 pt-10 text-xs">
+            <Separator className="flex-1" />
+            You&apos;ve reached the end
+            <Separator className="flex-1" />
+        </div>
+    );
+}
+
+function BackToTop() {
+    const [visible, setVisible] = useState(false);
+
+    useEffect(() => {
+        const onScroll = () => setVisible(window.scrollY > 1200);
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
+
+    return (
+        <Button
+            variant="outline"
+            size="icon"
+            aria-label="Back to top"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className={cn(
+                'bg-background/90 fixed right-4 bottom-4 z-20 rounded-full shadow-md backdrop-blur transition-all sm:right-6 sm:bottom-6',
+                visible ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-2 opacity-0',
+            )}
+        >
+            <ArrowUp />
+        </Button>
+    );
+}
+
 function EmptyState({ q, onSuggest }: { q: string; onSuggest: (s: string) => void }) {
     return (
-        <Card className="border-dashed shadow-none">
-            <CardHeader className="items-center text-center">
-                <div className="bg-muted mx-auto mb-2 grid size-12 place-items-center rounded-full">
-                    {q ? <SearchX className="text-muted-foreground size-5" /> : <Package className="text-muted-foreground size-5" />}
-                </div>
-                <CardTitle>{q ? `No products match “${q}”` : 'The index is empty'}</CardTitle>
-                <CardDescription>
+        <Empty className="border">
+            <EmptyHeader>
+                <EmptyMedia variant="icon">{q ? <SearchX /> : <Package />}</EmptyMedia>
+                <EmptyTitle>{q ? `No products match “${q}”` : 'The index is empty'}</EmptyTitle>
+                <EmptyDescription>
                     {q ? (
                         'Try fewer words, a brand name, or check the spelling.'
                     ) : (
@@ -354,70 +431,17 @@ function EmptyState({ q, onSuggest }: { q: string; onSuggest: (s: string) => voi
                             queue worker.
                         </>
                     )}
-                </CardDescription>
-            </CardHeader>
+                </EmptyDescription>
+            </EmptyHeader>
             {q && (
-                <CardContent className="flex justify-center gap-2">
+                <EmptyContent className="flex-row justify-center">
                     {SUGGESTIONS.slice(0, 3).map((s) => (
                         <Button key={s} variant="outline" size="sm" onClick={() => onSuggest(s)}>
                             {s}
                         </Button>
                     ))}
-                </CardContent>
+                </EmptyContent>
             )}
-        </Card>
-    );
-}
-
-function Pager({ products }: { products: ProductPage }) {
-    const first = products.window[0]?.page ?? 1;
-    const last = products.window[products.window.length - 1]?.page ?? products.last_page;
-
-    return (
-        <Pagination className="mt-10">
-            <PaginationContent>
-                <PaginationItem>
-                    <PaginationPrevious href={products.prev_url} />
-                </PaginationItem>
-
-                {first > 1 && (
-                    <>
-                        <PaginationItem>
-                            <PaginationLink href={products.first_url}>1</PaginationLink>
-                        </PaginationItem>
-                        {first > 2 && (
-                            <PaginationItem>
-                                <PaginationEllipsis />
-                            </PaginationItem>
-                        )}
-                    </>
-                )}
-
-                {products.window.map((link) => (
-                    <PaginationItem key={link.page}>
-                        <PaginationLink href={link.url} isActive={link.page === products.current_page}>
-                            {link.page}
-                        </PaginationLink>
-                    </PaginationItem>
-                ))}
-
-                {last < products.last_page && (
-                    <>
-                        {last < products.last_page - 1 && (
-                            <PaginationItem>
-                                <PaginationEllipsis />
-                            </PaginationItem>
-                        )}
-                        <PaginationItem>
-                            <PaginationLink href={products.last_url}>{products.last_page}</PaginationLink>
-                        </PaginationItem>
-                    </>
-                )}
-
-                <PaginationItem>
-                    <PaginationNext href={products.next_url} />
-                </PaginationItem>
-            </PaginationContent>
-        </Pagination>
+        </Empty>
     );
 }

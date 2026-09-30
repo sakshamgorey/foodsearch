@@ -53,8 +53,9 @@ When the PR merges, switch to the tagged release (`^11.x`). The API may change b
 
 Inertia + React + TypeScript, styled with **shadcn/ui** (new-york style, Tailwind v4). This is the same stack as Laravel's React starter kit.
 
-- `resources/js/pages/products/search.tsx` is the search page. It has live search (a 300 ms debounce into partial Inertia visits that reload only `q` and `products`), `/` to focus the box, Esc to clear, suggestion chips, empty states and shadcn pagination.
-- `resources/js/components/ui/*` holds the shadcn components (button, input, card, badge, separator, pagination). `components.json` is set up, so `npx shadcn@latest add dialog` works as it does in any shadcn project.
+- `resources/js/pages/products/search.tsx` is the search page. It has live search (a 300 ms debounce into partial Inertia visits that reload only `q` and `products`), `/` to focus the box, Esc to clear, suggestion chips and empty states.
+- Results use infinite scroll. `products` is an `Inertia::scroll()` prop and the page wraps the grid in `<InfiniteScroll>`, so scrolling requests `?page=N` and Inertia appends the new rows. A new search sends `reset: ['products']` to start a fresh list. After five automatic loads it switches to a "Load more" button so the footer stays reachable. Rank ties are broken by id so pages never overlap.
+- `resources/js/components/ui/*` holds the shadcn components (button, input, input-group, card, badge, separator, skeleton, spinner, kbd, empty). `components.json` is set up, so `npx shadcn@latest add dialog` works as it does in any shadcn project.
 - Theme tokens are in `resources/css/app.css`. The base is neutral with a green `--primary`, and dark mode follows the OS.
 - The controller sends only what the page renders (`present()`). `lastRun` and `total` are lazy props, so typing in the box doesn't re-count the table.
 
