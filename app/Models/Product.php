@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Laravel\Scout\Attributes\SearchUsingFullText;
 use Laravel\Scout\Searchable;
 
 class Product extends Model
@@ -23,18 +24,16 @@ class Product extends Model
     }
 
     /**
-     * With the pgsql engine the keys here are *column names*, not a document.
-     * They must match the columns passed to $table->searchable() in the
-     * migration; the engine uses them to decide which trigram columns apply.
+     * With the database engine the keys here are *column names*, not a document.
+     * Return only the stored tsvector: any other key adds an ILIKE clause that
+     * stops Postgres from using the GIN index. The attribute tells the engine to
+     * match it with `search_vector @@ websearch_to_tsquery(...)`, and to retry
+     * with `product_name % ?` (pg_trgm) only when full-text finds nothing.
      */
+    #[SearchUsingFullText(['search_vector'], ['vector' => true, 'mode' => 'websearch', 'trigram' => ['product_name']])]
     public function toSearchableArray(): array
     {
-        return [
-            'code' => $this->code,
-            'product_name' => $this->product_name,
-            'brands' => $this->brands,
-            'categories' => $this->categories,
-        ];
+        return ['search_vector' => null];
     }
 
     public function lastRun(): BelongsTo

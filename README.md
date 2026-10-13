@@ -1,6 +1,6 @@
 # Food Search
 
-Laravel 13 app that ingests Open Food Facts products every week through queued jobs and serves search through **Laravel Scout's unmerged `pgsql` engine** ([laravel/scout#998](https://github.com/laravel/scout/pull/998), branch `feat/pg-native-fullsearch`).
+Laravel 13 app that ingests Open Food Facts products every week through queued jobs and serves search through **Laravel Scout's `database` engine with native PostgreSQL full-text search**, from the unmerged [laravel/scout#1016](https://github.com/laravel/scout/pull/1016) (branch `feat/database-pgsql-search`).
 
 ```
 schedule (Sun 02:13 IST)
@@ -15,8 +15,8 @@ schedule (Sun 02:13 IST)
               └─ stop? (exhausted | caught_up | max_pages) else dispatch page N+1
 
 GET /?q=…  →  Product::search($q)  →  WHERE search_vector @@ websearch_to_tsquery(…)
-                                        OR product_name % …   (pg_trgm, typos)
-                                      ORDER BY ts_rank*1.0 + similarity*0.25
+                                      ORDER BY ts_rank(…) DESC, id DESC
+                                      0 hits? re-run with OR product_name % …   (pg_trgm, typos)
 ```
 
 ## Setup
@@ -41,13 +41,29 @@ Set `OFF_USER_AGENT` to your app name and a real contact email. OFF asks for it 
 
 ### Installing the unmerged Scout PR
 
-`composer.json` requires `"laravel/scout": "dev-feat/pg-native-fullsearch"`. The PR branch lives on `laravel/scout` itself, so Packagist already exposes it as a `dev-` version and you need no custom repository. **Pin the commit** so an upstream force-push can't change your code under you:
+`composer.json` requires `"laravel/scout": "dev-feat/database-pgsql-search"`. The PR branch lives on `laravel/scout` itself, so Packagist already exposes it as a `dev-` version and you need no custom repository. **Pin the commit** so an upstream force-push can't change your code under you:
 
 ```json
-"laravel/scout": "dev-feat/pg-native-fullsearch#0816c9acfad8afc7595ead4fe8326c998a9592f4"
+"laravel/scout": "dev-feat/database-pgsql-search#0e6677fb798192eb02f60c9fda9855f0889c36b7"
 ```
 
-When the PR merges, switch to the tagged release (`^11.x`). The API may change before then; the PR is still a **draft**.
+When the PR merges, switch to the tagged release (`^11.x`). The API may change before then, because the PR is still in review.
+
+PR #1016 replaces the earlier draft [#998](https://github.com/laravel/scout/pull/998). It adds no new driver. The built-in `database` engine learns Postgres full-text search, and the config lives in two places:
+
+```php
+// migration: generated, weighted tsvector + GIN index, plus pg_trgm and a trigram index
+$table->searchable(['code' => 'A', 'product_name' => 'A', 'brands' => 'B', 'categories' => 'C'], 'english', trigram: ['product_name']);
+
+// model: search the stored vector, websearch syntax, trigram as a fallback
+#[SearchUsingFullText(['search_vector'], ['vector' => true, 'mode' => 'websearch', 'trigram' => ['product_name']])]
+public function toSearchableArray(): array
+{
+    return ['search_vector' => null];
+}
+```
+
+Any option can be overridden per query, for example `Product::search($q)->options(['trigram_mode' => 'blend'])` or `->options(['trigram' => null])`.
 
 ## Frontend
 
@@ -89,7 +105,7 @@ This fixed-size dark-mode GIF shows a chocolate search with product photos from 
 - A 5xx, a timeout, or an HTML maintenance page served with a 200 throws `RemoteUnavailable`. That error is transient and the job is retried.
 - Any other 4xx throws `InvalidResponse`. The job fails immediately and the run is marked failed.
 
-**Why doesn't Scout's `queue` setting matter here?** The pgsql engine's `update()` and `delete()` are no-ops. `search_vector` is a `GENERATED ALWAYS … STORED` column, so Postgres recomputes it on every write, including `Product::upsert()`, which fires no Eloquent events. With Algolia or Meilisearch, bulk upserts would silently skip indexing. Here they can't. The tradeoff is that the vector is recomputed on every write and you can't index derived data from other tables.
+**Why doesn't Scout's `queue` setting matter here?** The database engine's `update()` and `delete()` are no-ops, because it queries the table directly. `search_vector` is a `GENERATED ALWAYS … STORED` column, so Postgres recomputes it on every write, including `Product::upsert()`, which fires no Eloquent events. With Algolia or Meilisearch, bulk upserts would silently skip indexing. Here they can't. The tradeoff is that the vector is recomputed on every write and you can't index derived data from other tables.
 
 **Why are the weights A/A/B/C?** The barcode and name are weighted A, brands B and categories C. A search for "chocolate" therefore ranks *Dark Chocolate 70%* above biscuits that are only *categorised* as chocolate.
 
@@ -97,10 +113,11 @@ This fixed-size dark-mode GIF shows a chocolate search with product photos from 
 
 - **OFF's search API is not a bulk export.** OFF asks clients that need more than a few hundred products to use the daily JSONL/CSV dumps. At 8 req/min × 100 products, one page cap of 50 pages takes about 6 minutes and covers 5,000 products. The full catalogue (3M+ products) would take days. Use the API for a scoped slice (`OFF_COUNTRY`, a category filter) or for weekly deltas. For the whole database, change the job to stream the JSONL dump in chunks: the upsert path and the search stay the same.
 - The incremental cutoff assumes `sort_by=last_modified_t` returns products newest-first. If OFF changes that ordering, runs fall back to `max_pages` and stay correct, just slower.
-- **Typo matching only works on short names.** The PR's trigram branch uses `product_name % ?`, which compares the query with the *whole* name. `nutela` → *Nutella* matches, but `biscit` doesn't match *Parle-G Glucose Biscuits*, because the similarity against a long string stays under 0.3. You'd need `word_similarity` (`<%`) for per-word fuzziness, and the PR doesn't use it yet.
-- **Trigram ignores websearch operators.** The trigram predicate is OR'ed with the tsquery and receives the raw string, so `ferrero -nutella` still returns Nutella through the trigram branch. `ProductSearchTest` pins both behaviours, so you'll notice if the PR changes them.
+- **Typo matching is a fallback, and it only works on short names.** The trigram query runs only when full-text search returns nothing, so a query with one typo in an otherwise-matching phrase gets no fuzzy help. It uses `product_name % ?`, which compares the query with the *whole* name. `nutela` → *Nutella* matches, but `biscit` doesn't match *Parle-G Glucose Biscuits*, because the similarity against a long string stays under 0.3. You'd need `word_similarity` (`<%`) for per-word fuzziness, and the PR doesn't use it yet.
+- **`blend` mode ignores websearch operators.** In the default `fallback` mode, `ferrero -nutella` returns only Kinder Bueno. With `trigram_mode => blend`, the trigram predicate is OR'ed into every query with the raw string, so Nutella comes back. `ProductSearchTest` pins both behaviours, so you'll notice if the PR changes them.
 - Products deleted on OFF are never removed here. A future `deleted_at` sweep could compare `last_run_id` after a `--full` run.
-- There are open review notes on the PR. `set_config('pg_trgm.similarity_threshold')` may not affect an index scan that has already started, and `scout:import` doesn't create the schema unless you pass `--prepare-pgsql`. This app uses a migration, so it doesn't depend on the second one.
+- The trigram threshold is Postgres's `pg_trgm.similarity_threshold` (default 0.3). The PR has no option for it.
+- With trigram configured, the engine checks once per connection that `pg_trgm` is installed and throws a `RuntimeException` if it isn't. The migration creates the extension, so the DB user needs permission to do that (it's a trusted extension on PG 13+).
 - `onOneServer()` and the rate limiter require a shared cache store (database or Redis), not `file` or `array`.
 
 ## Tests
@@ -108,5 +125,5 @@ This fixed-size dark-mode GIF shows a chocolate search with product photos from 
 The tests run against a real Postgres database (`foodsearch_test`, set in `phpunit.xml`), because tsvector, pg_trgm and generated columns can't be faked in SQLite.
 
 ```bash
-createdb foodsearch_test && php artisan test     # 22 tests: pipeline + search
+createdb foodsearch_test && php artisan test     # 25 tests: pipeline + search
 ```

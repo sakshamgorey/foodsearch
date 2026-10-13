@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ed22b0708966ff88fa84e0c9f7a3eb1f",
+    "content-hash": "438fb9c924cb707dff0c432c4a7e87db",
     "packages": [
         {
             "name": "brick/math",
@@ -1422,16 +1422,16 @@
         },
         {
             "name": "laravel/scout",
-            "version": "dev-feat/pg-native-fullsearch",
+            "version": "dev-feat/database-pgsql-search",
             "source": {
                 "type": "git",
                 "url": "https://github.com/laravel/scout.git",
-                "reference": "0816c9acfad8afc7595ead4fe8326c998a9592f4"
+                "reference": "0e6677fb798192eb02f60c9fda9855f0889c36b7"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/laravel/scout/zipball/0816c9acfad8afc7595ead4fe8326c998a9592f4",
-                "reference": "0816c9acfad8afc7595ead4fe8326c998a9592f4",
+                "url": "https://api.github.com/repos/laravel/scout/zipball/0e6677fb798192eb02f60c9fda9855f0889c36b7",
+                "reference": "0e6677fb798192eb02f60c9fda9855f0889c36b7",
                 "shasum": ""
             },
             "require": {
@@ -1459,6 +1459,7 @@
             },
             "suggest": {
                 "algolia/algoliasearch-client-php": "Required to use the Algolia engine (^3.2).",
+                "laravel/ai": "Required to generate embeddings for semantic and hybrid search.",
                 "meilisearch/meilisearch-php": "Required to use the Meilisearch engine (^1.0).",
                 "typesense/typesense-php": "Required to use the Typesense engine (^4.9)."
             },
@@ -1498,7 +1499,7 @@
                 "issues": "https://github.com/laravel/scout/issues",
                 "source": "https://github.com/laravel/scout"
             },
-            "time": "2026-06-15T16:38:30+00:00"
+            "time": "2026-10-12T12:29:10+00:00"
         },
         {
             "name": "laravel/serializable-closure",

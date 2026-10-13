@@ -42,7 +42,7 @@ class ProductSearchTest extends TestCase
     public function test_generated_vector_is_filled_by_postgres_on_bulk_upsert(): void
     {
         $this->assertSame(0, DB::table('products')->whereNull('search_vector')->count());
-        $this->assertSame('pgsql', config('scout.driver'));
+        $this->assertSame('database', config('scout.driver'));
     }
 
     public function test_matches_name_brand_category_and_barcode(): void
@@ -65,29 +65,40 @@ class ProductSearchTest extends TestCase
         $this->assertSame('Dark Chocolate 70%', $this->names('chocolate')[0]);
     }
 
-    public function test_trigram_catches_typos_that_full_text_misses(): void
+    public function test_trigram_fallback_catches_typos_that_full_text_misses(): void
     {
         $this->assertContains('Nutella', $this->names('nutela'));
 
-        config(['scout.pgsql.trigram.enabled' => false]);
-        app(\Laravel\Scout\EngineManager::class)->forgetDrivers();
+        // Per-query override: no trigram, so the typo finds nothing.
+        $this->assertSame([], Product::search('nutela')->options(['trigram' => null])->get()->all());
+    }
 
-        $this->assertNotContains('Nutella', $this->names('nutela'));
+    public function test_trigram_fallback_only_runs_when_full_text_finds_nothing(): void
+    {
+        $queries = [];
+        DB::listen(function ($query) use (&$queries) {
+            $queries[] = $query->sql;
+        });
+
+        $this->names('nutella');
+        $this->assertCount(0, array_filter($queries, fn ($sql) => str_contains($sql, '% ?')));
+
+        $this->names('nutela');
+        $this->assertNotEmpty(array_filter($queries, fn ($sql) => str_contains($sql, '% ?')));
     }
 
     /**
-     * Tradeoff worth knowing: the trigram branch is OR'ed with the tsquery and
-     * compares the *raw* query string, so websearch operators like -exclusion
-     * only hold when trigram is off.
+     * In the default "fallback" mode, trigram only runs when full-text finds
+     * nothing, so websearch operators like -exclusion hold. "blend" ORs the raw
+     * string's trigram match into every query, which undoes the exclusion.
      */
-    public function test_websearch_exclusion_is_undone_by_trigram_or_branch(): void
+    public function test_websearch_exclusion_holds_unless_trigram_is_blended(): void
     {
-        $this->assertContains('Nutella', $this->names('ferrero -nutella'));
-
-        config(['scout.pgsql.trigram.enabled' => false]);
-        app(\Laravel\Scout\EngineManager::class)->forgetDrivers();
-
         $this->assertSame(['Kinder Bueno'], $this->names('ferrero -nutella'));
+
+        $blended = Product::search('ferrero -nutella')->options(['trigram_mode' => 'blend'])->get()->pluck('product_name')->all();
+
+        $this->assertContains('Nutella', $blended);
     }
 
     public function test_search_page_renders_results(): void

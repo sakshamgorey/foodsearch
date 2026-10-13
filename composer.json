@@ -12,7 +12,7 @@
         "php": "^8.3",
         "laravel/framework": "^13.17",
         "laravel/tinker": "^3.0",
-        "laravel/scout": "dev-feat/pg-native-fullsearch#0816c9acfad8afc7595ead4fe8326c998a9592f4",
+        "laravel/scout": "dev-feat/database-pgsql-search#0e6677fb798192eb02f60c9fda9855f0889c36b7",
         "inertiajs/inertia-laravel": "^3.4"
     },
     "require-dev": {

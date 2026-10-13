@@ -42,9 +42,9 @@ class ProductSearchController extends Controller
 
     private function search(string $q): LengthAwarePaginator
     {
-        // Blank query: the pgsql engine orders by id desc (newest ingested first).
-        // Otherwise: WHERE search_vector @@ websearch_to_tsquery(...) OR <trigram match>
-        //            ORDER BY ts_rank(...) * 1.0 + similarity(...) * 0.25 DESC
+        // Blank query: no WHERE; every rank ties, so the id desc tie-breaker wins (newest first).
+        // Otherwise: WHERE search_vector @@ websearch_to_tsquery(...) ORDER BY ts_rank(...) DESC, id DESC,
+        //            re-run with OR product_name % ? (pg_trgm) only if that finds nothing.
         return Product::search($q)
             ->query(fn ($query) => $query->select([
                 'id', 'code', 'product_name', 'brands', 'categories', 'image_url', 'off_modified_at',

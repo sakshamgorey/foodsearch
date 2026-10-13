@@ -19,28 +19,22 @@ return new class extends Migration
             $table->foreignId('last_run_id')->nullable()->constrained('ingestion_runs')->nullOnDelete();
             $table->timestamps();
 
-            // From laravel/scout PR #998. Adds:
+            // From laravel/scout PR #1016. Adds:
             //   search_vector tsvector GENERATED ALWAYS AS (
-            //     setweight(to_tsvector('english', coalesce(product_name,'')), 'A') || ...
+            //     setweight(to_tsvector('english', coalesce("product_name"::text, '')), 'A') || ...
             //   ) STORED
             //   + a GIN index on search_vector
+            //   + CREATE EXTENSION IF NOT EXISTS pg_trgm
             //   + a GIN gin_trgm_ops index on product_name (typo tolerance)
             //
             // Because the vector is a generated column, Postgres keeps it in sync
             // on every INSERT/UPDATE — including bulk upserts that never fire
             // Eloquent events. Scout's indexing step becomes a no-op.
-            $table->searchable(['code', 'product_name', 'brands', 'categories'], [
-                'weights' => [
-                    'code' => 'A',
-                    'product_name' => 'A',
-                    'brands' => 'B',
-                    'categories' => 'C',
-                ],
-                'trigram' => [
-                    'columns' => ['product_name'],
-                    'create_extension' => true,
-                ],
-            ]);
+            $table->searchable(
+                ['code' => 'A', 'product_name' => 'A', 'brands' => 'B', 'categories' => 'C'],
+                'english',
+                trigram: ['product_name'],
+            );
         });
     }
 
